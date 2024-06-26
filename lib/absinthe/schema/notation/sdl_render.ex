@@ -70,7 +70,7 @@ defmodule Absinthe.Schema.Notation.SDL.Render do
       string(@adapter.to_external_name(input_value.name, :argument)),
       ": ",
       render(input_value.type, type_definitions),
-      default(input_value.default_value_blueprint),
+      default(input_value),
       directives(input_value.directives, type_definitions)
     ])
     |> description(input_value.description)
@@ -82,6 +82,7 @@ defmodule Absinthe.Schema.Notation.SDL.Render do
       arguments(field.arguments, type_definitions),
       ": ",
       render(field.type, type_definitions),
+      default(field),
       directives(field.directives, type_definitions)
     ])
     |> description(field.description)
@@ -306,14 +307,6 @@ defmodule Absinthe.Schema.Notation.SDL.Render do
     )
   end
 
-  defp default(nil) do
-    empty()
-  end
-
-  defp default(default_value) do
-    concat([" = ", render_value(default_value)])
-  end
-
   defp description(docs, nil) do
     docs
   end
@@ -390,17 +383,21 @@ defmodule Absinthe.Schema.Notation.SDL.Render do
     end)
   end
 
-  defp render_value(%Blueprint.Input.String{value: value}),
-    do: render_string_value(value)
+  defp render_value(%Blueprint.Input.String{value: value}) do
+    render_string_value(value)
+  end
 
-  defp render_value(%Blueprint.Input.RawValue{content: content}),
-    do: render_value(content)
+  defp render_value(%Blueprint.Input.RawValue{content: content}) do
+    render_value(content)
+  end
 
-  defp render_value(%Blueprint.Input.Value{raw: raw}),
-    do: render_value(raw)
+  defp render_value(%Blueprint.Input.Value{raw: raw}) do
+    render_value(raw)
+  end
 
-  defp render_value(%Blueprint.Input.Null{}),
-    do: "null"
+  defp render_value(%Blueprint.Input.Null{}) do
+    "null"
+  end
 
   defp render_value(%Blueprint.Input.Object{fields: fields}) do
     default_fields = Enum.map(fields, &render_value/1)
@@ -415,8 +412,34 @@ defmodule Absinthe.Schema.Notation.SDL.Render do
   defp render_value(%Blueprint.Input.Field{name: name, input_value: value}),
     do: concat([name, ": ", render_value(value)])
 
-  defp render_value(%{value: value}),
-    do: to_string(value)
+  defp render_value(%{value: value}) do
+    to_string(value)
+  end
+
+  # Default value related helpers
+
+  defp default(%{default_value_blueprint: blueprint}) when not is_nil(blueprint) do
+    concat([" = ", render_value(blueprint)])
+  end
+
+  @supported_types ~w(boolean float id integer string)a
+
+  defp default(%{default_value: nil}), do: empty()
+
+  defp default(object)
+       when object.type in @supported_types
+       when object.type.of_type in @supported_types do
+    concat([" = ", render_default(object.type, object.default_value)])
+  end
+
+  defp default(_not_supported_object), do: empty()
+
+  defp render_default(%Blueprint.TypeReference.NonNull{of_type: type}, default) do
+    render_default(type, default)
+  end
+
+  defp render_default(type, value) when type in ~w(boolean float integer)a, do: "#{value}"
+  defp render_default(type, value) when type in ~w(id string)a, do: "\"#{value}\""
 
   # Algebra Helpers
 

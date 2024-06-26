@@ -107,6 +107,43 @@ defmodule Mix.Tasks.Absinthe.Schema.SdlTest do
     end
   end
 
+  defmodule TestSchemaWithDefaults do
+    use Absinthe.Schema
+
+    query do
+      field :string, :string, default_value: "string_default"
+      field :integer, :integer, default_value: 2137
+      field :float, :float, default_value: 3.14
+      field :id, :id, default_value: 1
+      field :boolean, :boolean, default_value: true
+      # TODO Add support for compound types
+      field :non_null_boolean, non_null(:boolean), default_value: true
+      field :enum, non_null(:enum), default_value: "SECOND"
+
+      field :compound_boolean, :boolean, default_value: false do
+        arg :string, :string, default_value: "argument_string_default"
+        arg :integer, :integer, default_value: 12137
+        arg :float, :float, default_value: 13.14
+        arg :id, :id, default_value: 11
+        arg :boolean, :boolean, default_value: false
+        arg :non_null_boolean, non_null(:boolean), default_value: false
+        # This enum still needs to print FIRST as a default, since it's only an alias
+        # TODO Add support for compound types
+        arg :enum, non_null(:enum), default_value: "FiRsT  x"
+        arg :input_object, :input_object, default_value: %{string: "Hey!"}
+      end
+    end
+
+    enum :enum do
+      value :first, as: "FiRsT  x"
+      value :second, as: "SECOND"
+    end
+
+    input_object :input_object do
+      field :string, :string, default_value: "string_default"
+    end
+  end
+
   defmodule PersistentTermTestSchema do
     use Absinthe.Schema
 
@@ -193,5 +230,22 @@ defmodule Mix.Tasks.Absinthe.Schema.SdlTest do
 
       assert File.exists?(path)
     end
+  end
+
+  @schema_with_defaults "Mix.Tasks.Absinthe.Schema.SdlTest.TestSchemaWithDefaults"
+  test "default values are set correctly" do
+    argv = ["--schema", @schema_with_defaults]
+    opts = Task.parse_options(argv)
+
+    {:ok, schema} = Task.generate_schema(opts)
+    # Field defaults work
+    assert schema =~ "string: String = \"string_default\""
+    assert schema =~ "integer: Int = 2137"
+    assert schema =~ "float: Float = 3.14"
+    assert schema =~ "id: ID = \"1\""
+    assert schema =~ "boolean: Boolean = true"
+    assert schema =~ "nonNullBoolean: Boolean! = true"
+
+    # Argument defaults work
   end
 end
